@@ -1,0 +1,257 @@
+﻿<header>
+    <div class="content-wrapper">
+        <div class="float-left">
+            <p class="site-title">
+                <h2>Upload Files</h2>
+            </p>
+        </div>
+    </div>
+</header>
+<style type="text/css">
+    #file {
+        display: none;
+    }
+
+    .box-input {
+        width: 100%;
+        height: 300px;
+        border: 1px solid #000;
+    }
+
+    .btn i {
+        margin-right: 5px;
+    }
+
+    .table tr td {
+        vertical-align: middle !important;
+    }
+
+    .table tr td.upload-btn {
+        width: 53px;
+    }
+
+    .table tr td div.progress {
+        position: relative;
+        top: 10px;
+        min-width: 200px;
+    }
+
+    .table tr td div.progress .progress-bar {
+        line-height: 20px;
+    }
+</style>
+
+<div id="body">
+    <section class="main-content clear-fix">
+
+        <form name="form1" method="post" enctype="multipart/form-data" action="/api/upload/multiple">
+            <input type="file" name="files[]" id="file" multiple />
+
+            <div class="box-input">
+                <table class="table table-striped"></table>
+            </div>
+        </form>
+    </section>
+</div>
+
+@section scripts {
+    <script type="text/javascript">
+        $(function () {
+            var div = $('.box-input')[0];
+            var isDraggable = ('draggable' in div) || ('ondragstart' in div && 'ondrop' in div);
+            var formData = 'FormData' in window;
+            var fileReader = 'FileReader' in window;
+            var droppedFiles = [];
+            var form = $('form');
+
+            var reUploadEvent = function (file, container, e) {
+                    e.preventDefault();
+                    var upload = new Upload(file, container);
+
+                    container.find('.upload-btn').empty()
+                            .append(getCancelButton(file));
+
+                    upload.doUpload();
+
+                    return false;
+                },
+                cancelEvent = function (file, e) {
+                    e.preventDefault();
+                    
+                    var container = $(e.currentTarget).parent().parent();
+
+                    return false;
+                },
+                deleteEvent = function (file, container, e) {
+                    e.preventDefault();
+                    var upload = new Upload(file, container);
+
+                    upload.removeUpload(container.data('id'));
+
+                    return false;
+                };
+
+            var isExists = function (file) {
+                    return droppedFiles.filter(function (f) {
+                        return f.name === file.name;
+                    }).length;
+                },
+                addToList = function (file) {
+                    return $('<tr />')
+                        .append(getName(file))
+                        .append(getProgressBar())
+                        .append(getCancelButton(file))
+                        .appendTo($('.table'));
+                },
+                getName = function (file) {
+                    return $('<td />', {text: file.name});
+                },
+                getCancelButton = function (file) {
+                    return $('<td />', { class: 'upload-btn' });
+                        //.append(
+                        //    $('<button />', { class: 'btn btn-warning cancel' })
+                        //        .append($('<i />', { class: 'glyphicon glyphicon-ban-circle' }))
+                        //        .append($('<span />', { text: 'Cancel' }))
+                        //        .on('click', cancelEvent.bind(this, file))
+                        //);
+                },
+                getDeleteButton = function (file, container) {
+                    return $('<td />', { class: 'upload-btn' })
+                        .append(
+                            $('<button />', { class: 'btn btn-danger delete' })
+                                .append($('<i />', { class: 'glyphicon glyphicon-trash' }))
+                                .append($('<span />', { text: 'Remove' }))
+                                .on('click', deleteEvent.bind(this, file, container))
+                        );
+                },
+                getUploadButton = function (file, container) {
+                    return $('<td />', { class: 'upload-btn' })
+                        .append(
+                            $('<button />', { class: 'btn btn-primary re-upload' })
+                                .append($('<i />', { class: 'glyphicon glyphicon-upload' }))
+                                .append($('<span />', { text: 'Upload' }))
+                                .on('click', reUploadEvent.bind(this, file, container))
+                        );
+                },
+                getProgressBar = function () {
+                    return $('<td />', {
+                        html: $('<div />', { class: 'progress' })
+                            .append($('<div />', {
+                                class: 'progress-bar',
+                                role: 'progressbar',
+                                ariaValueNow: 0,
+                                ariaValueMin: 0,
+                                ariaValueMax: 100
+                            }))
+                    })
+                };
+
+            var Upload = function (file, container) {
+                this.file = file;
+                this.container = container;
+            };
+
+            Upload.prototype.getType = function () {
+                return this.file.type;
+            };
+            Upload.prototype.getSize = function () {
+                return this.file.size;
+            };
+            Upload.prototype.getName = function () {
+                return this.file.name;
+            };
+            Upload.prototype.doUpload = function () {
+                var that = this;
+                var formData = new FormData();
+
+                formData.append("file", this.file, this.getName());
+
+                $.ajax({
+                    type: "POST",
+                    url: "/api/upload/multiple",
+                    xhr: function () {
+                        var myXhr = $.ajaxSettings.xhr();
+
+                        if (myXhr.upload)
+                            myXhr.upload.addEventListener('progress', that.progressHandling.bind(that), false);
+
+                        return myXhr;
+                    },
+                    success: function (data) {
+                        that.container.attr('data-id', data[0].Id);
+                        that.container.find('.upload-btn').empty()
+                            .append(getDeleteButton(that.file, that.container));
+                    },
+                    error: function (error) {
+                        that.container.find('.progress .progress-bar').css('width', 0);
+                        that.container.find('.progress .progress-bar').text('0%');
+                        that.container.find('.upload-btn').empty()
+                            .append(getUploadButton(that.file, that.container));
+                    },
+                    data: formData,
+                    cache: false,
+                    contentType: false,
+                    processData: false,
+                    timeout: 60000
+                });
+            };
+
+            Upload.prototype.removeUpload = function (id) {
+                var that = this;
+
+                $.ajax({
+                    type: 'DELETE',
+                    url: '/api/upload/remove/' + id,
+                    success: function (data) {
+                        if (data) {
+                            var idx = droppedFiles.findIndex(function (d) { return d.name === that.getName() });
+
+                            if (idx > -1)
+                                droppedFiles.splice(idx, 1);
+
+                            that.container.remove();
+                        }
+                    },
+                    error: function () {
+
+                    }
+                })
+            };
+
+            Upload.prototype.progressHandling = function (event) {
+                var percent = 0;
+                var position = event.loaded || event.position;
+                var total = event.total;
+
+                if (event.lengthComputable)
+                    percent = Math.ceil(position / total * 100);
+
+                this.container.find('.progress .progress-bar').css('width', +percent + '%');
+                this.container.find('.progress .progress-bar').text(percent + '%');
+            };
+
+            form.on('drag dragstart dragend dragover dragenter dragleave drop', function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                })
+                .on('drop', function (e) {
+                    if (!e.originalEvent.dataTransfer.files)
+                        return;
+
+                    var files = e.originalEvent.dataTransfer.files;
+
+                    for (var x = 0, len = files.length; x < len; x++) {
+                        if (isExists(files[x]))
+                            continue;
+
+                        droppedFiles.push(files[x]);
+                        
+                        var tr = addToList(files[x]);
+                        var upload = new Upload(files[x], tr);
+
+                        upload.doUpload();
+                    }
+                });
+        });
+    </script>
+}
